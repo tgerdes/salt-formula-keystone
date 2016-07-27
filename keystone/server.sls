@@ -204,6 +204,7 @@ keystone_syncdb:
 
 {% if server.tokens.engine == 'fernet' %}
 
+{%- if not grains.get('noservices', False) %}
 keystone_fernet_keys:
   file.directory:
   - name: {{ server.tokens.location }}
@@ -214,6 +215,7 @@ keystone_fernet_keys:
     - pkg: keystone_packages
   - require_in:
     - service: keystone_fernet_setup
+{%- endif %}
 
 {%- if not grains.get('noservices', False) %}
 keystone_fernet_setup:
