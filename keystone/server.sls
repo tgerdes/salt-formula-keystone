@@ -5,6 +5,30 @@ keystone_packages:
   pkg.installed:
   - names: {{ server.pkgs }}
 
+{%- if server.service_name in ['apache2', 'httpd'] %}
+include:
+- apache
+
+{%- if grains.os_family == "Debian" %}
+keystone:
+{%- endif %}
+{%- if grains.os_family == "RedHat" %}
+openstack-keystone:
+{%- endif %}
+  service.dead:
+    - enable: False
+    - watch:
+      - pkg: keystone_packages
+
+{%- endif %}
+
+keystone_salt_config:
+  file.managed:
+    - name: /etc/salt/minion.d/keystone.conf
+    - template: jinja
+    - source: salt://keystone/files/salt-minion.conf
+    - mode: 600
+
 {%- if not salt['user.info']('keystone') %}
 
 keystone_user:
@@ -35,7 +59,20 @@ keystone_group:
   - template: jinja
   - require:
     - pkg: keystone_packages
+  - watch_in:
+    - service: keystone_service
 
+{% if server.websso is defined %}
+
+/etc/keystone/sso_callback_template.html:
+  file.managed:
+  - source: salt://keystone/files/sso_callback_template.html
+  - require:
+    - pkg: keystone_packages
+  - watch_in:
+    - service: keystone_service
+
+{%- endif %}
 
 /etc/keystone/keystone-paste.ini:
   file.managed:
@@ -43,16 +80,20 @@ keystone_group:
   - template: jinja
   - require:
     - pkg: keystone_packages
+  {%- if not grains.get('noservices', False) %}
   - watch_in:
     - service: keystone_service
+  {%- endif %}
 
 /etc/keystone/policy.json:
   file.managed:
   - source: salt://keystone/files/{{ server.version }}/policy-v{{ server.api_version }}.json
   - require:
     - pkg: keystone_packages
+  {%- if not grains.get('noservices', False) %}
   - watch_in:
     - service: keystone_service
+  {%- endif %}
 
 {%- if server.get("domain", {}) %}
 
@@ -70,8 +111,10 @@ keystone_group:
     - template: jinja
     - require:
       - file: /etc/keystone/domains
+    {%- if not grains.get('noservices', False) %}
     - watch_in:
       - service: keystone_service
+    {%- endif %}
     - defaults:
         domain_name: {{ domain_name }}
 
@@ -83,11 +126,14 @@ keystone_domain_{{ domain_name }}_cacert:
     - contents_pillar: keystone:server:domain:{{ domain_name }}:ldap:tls:cacert
     - require:
       - file: /etc/keystone/domains
+    {%- if not grains.get('noservices', False) %}
     - watch_in:
       - service: keystone_service
+    {%- endif %}
 
 {%- endif %}
 
+{%- if not grains.get('noservices', False) %}
 keystone_domain_{{ domain_name }}:
   cmd.run:
     - name: source /root/keystonercv3 && openstack domain create --description "{{ domain.description }}" {{ domain_name }}
@@ -95,6 +141,7 @@ keystone_domain_{{ domain_name }}:
     - require:
       - file: /root/keystonercv3
       - service: keystone_service
+{%- endif %}
 
 {%- endfor %}
 
@@ -108,17 +155,30 @@ keystone_ldap_default_cacert:
     - contents_pillar: keystone:server:ldap:tls:cacert
     - require:
       - pkg: keystone_packages
+    {%- if not grains.get('noservices', False) %}
     - watch_in:
       - service: keystone_service
+    {%- endif %}
 
 {%- endif %}
 
+{%- if not grains.get('noservices', False) %}
 keystone_service:
   service.running:
   - name: {{ server.service_name }}
   - enable: True
   - watch:
     - file: /etc/keystone/keystone.conf
+{%- endif %}
+
+{%- if grains.get('virtual_subtype', None) == "Docker" %}
+keystone_entrypoint:
+  file.managed:
+  - name: /entrypoint.sh
+  - template: jinja
+  - source: salt://keystone/files/entrypoint.sh
+  - mode: 755
+{%- endif %}
 
 /root/keystonerc:
   file.managed:
@@ -134,11 +194,13 @@ keystone_service:
   - require:
     - pkg: keystone_packages
 
+{%- if not grains.get('noservices', False) %}
 keystone_syncdb:
   cmd.run:
-  - name: keystone-manage db_sync
+  - name: keystone-manage db_sync; sleep 1
   - require:
     - service: keystone_service
+{%- endif %}
 
 {% if server.tokens.engine == 'fernet' %}
 
@@ -153,30 +215,43 @@ keystone_fernet_keys:
   - require_in:
     - service: keystone_fernet_setup
 
+{%- if not grains.get('noservices', False) %}
 keystone_fernet_setup:
   cmd.run:
   - name: keystone-manage fernet_setup --keystone-user keystone --keystone-group keystone
   - require:
     - service: keystone_service
     - file: keystone_fernet_keys
+{%- endif %}
 
 {% endif %}
+
+{%- if not grains.get('noservices', False) %}
+
+{%- if not salt['pillar.get']('linux:system:repo:mirantis_openstack', False) %}
 
 keystone_service_tenant:
   keystone.tenant_present:
   - name: {{ server.service_tenant }}
+  - connection_token: {{ server.service_token }}
+  - connection_endpoint: 'http://{{ server.bind.address }}:{{ server.bind.private_port }}/v2.0'
   - require:
     - cmd: keystone_syncdb
+    - file: keystone_salt_config
 
 keystone_admin_tenant:
   keystone.tenant_present:
   - name: {{ server.admin_tenant }}
+  - connection_token: {{ server.service_token }}
+  - connection_endpoint: 'http://{{ server.bind.address }}:{{ server.bind.private_port }}/v2.0'
   - require:
     - keystone: keystone_service_tenant
 
 keystone_roles:
   keystone.role_present:
   - names: {{ server.roles }}
+  - connection_token: {{ server.service_token }}
+  - connection_endpoint: 'http://{{ server.bind.address }}:{{ server.bind.private_port }}/v2.0'
   - require:
     - keystone: keystone_service_tenant
 
@@ -189,17 +264,23 @@ keystone_admin_user:
   - roles:
       {{ server.admin_tenant }}:
       - admin
+  - connection_token: {{ server.service_token }}
+  - connection_endpoint: 'http://{{ server.bind.address }}:{{ server.bind.private_port }}/v2.0'
   - require:
     - keystone: keystone_admin_tenant
     - keystone: keystone_roles
 
-{% for service_name, service in server.get('service', {}).iteritems() %}
+{%- endif %}
+
+{%- for service_name, service in server.get('service', {}).iteritems() %}
 
 keystone_{{ service_name }}_service:
   keystone.service_present:
   - name: {{ service_name }}
   - service_type: {{ service.type }}
   - description: {{ service.description }}
+  - connection_token: {{ server.service_token }}
+  - connection_endpoint: 'http://{{ server.bind.address }}:{{ server.bind.private_port }}/v2.0'
   - require:
     - keystone: keystone_roles
 
@@ -210,8 +291,11 @@ keystone_{{ service_name }}_endpoint:
   - internalurl: '{{ service.bind.get('internal_protocol', 'http') }}://{{ service.bind.internal_address }}:{{ service.bind.internal_port }}{{ service.bind.internal_path }}'
   - adminurl: '{{ service.bind.get('admin_protocol', 'http') }}://{{ service.bind.admin_address }}:{{ service.bind.admin_port }}{{ service.bind.admin_path }}'
   - region: {{ service.get('region', 'RegionOne') }}
+  - connection_token: {{ server.service_token }}
+  - connection_endpoint: 'http://{{ server.bind.address }}:{{ server.bind.private_port }}/v2.0'
   - require:
     - keystone: keystone_{{ service_name }}_service
+    - file: keystone_salt_config
 
 {% if service.user is defined %}
 
@@ -224,18 +308,22 @@ keystone_user_{{ service.user.name }}:
   - roles:
       {{ server.service_tenant }}:
       - admin
+  - connection_token: {{ server.service_token }}
+  - connection_endpoint: 'http://{{ server.bind.address }}:{{ server.bind.private_port }}/v2.0'
   - require:
     - keystone: keystone_roles
 
 {% endif %}
 
-{% endfor %}
+{%- endfor %}
 
 {%- for tenant_name, tenant in server.get('tenant', {}).iteritems() %}
 
 keystone_tenant_{{ tenant_name }}:
   keystone.tenant_present:
   - name: {{ tenant_name }}
+  - connection_token: {{ server.service_token }}
+  - connection_endpoint: 'http://{{ server.bind.address }}:{{ server.bind.private_port }}/v2.0'
   - require:
     - keystone: keystone_roles
 
@@ -254,11 +342,14 @@ keystone_user_{{ user_name }}:
       {%- else %}
       - Member
       {%- endif %}
+  - connection_token: {{ server.service_token }}
+  - connection_endpoint: 'http://{{ server.bind.address }}:{{ server.bind.private_port }}/v2.0'
   - require:
     - keystone: keystone_tenant_{{ tenant_name }}
 
 {%- endfor %}
 
 {%- endfor %}
+{%- endif %} {# end noservices #}
 
 {%- endif %}

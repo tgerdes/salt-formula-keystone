@@ -26,6 +26,7 @@ keystone:
       expiration: 86400
       location: /etc/keystone/fernet-keys/
     notification: true
+    notification_format: cadf
     message_queue:
       engine: rabbitmq
       host: 127.0.0.1
@@ -36,7 +37,7 @@ keystone:
       ha_queues: true
     cache:
       engine: memcached
-      members: 
+      members:
       - host: 127.0.0.1
         port: 11211
       - host: 127.0.0.1
