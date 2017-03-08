@@ -18,6 +18,8 @@ Package: salt-formula-keystone
 Architecture: all
 Depends: reclass,
          salt-master,
+         salt-formula-mysql,
+         salt-formula-apache,
          ${misc:Depends},
 Description: Salt formula for OpenStack Keystone
  Salt is a powerful remote execution manager that can be used to
