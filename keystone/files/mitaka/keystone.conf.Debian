@@ -377,11 +377,6 @@ methods = external,password,token,{{ server.websso.protocol }}
 # namespace. (string value)
 #oauth1 = <None>
 
-{% if server.websso is defined %}
-[{{ server.websso.protocol }}]
-remote_id_attribute = {{ server.websso.remote_id_attribute }}
-{%- endif %}
-
 [cache]
 
 #
@@ -843,7 +838,7 @@ admin_bind_host={% if server.bind.address is defined %}{{ server.bind.address }}
 # Entrypoint for the federation backend driver in the keystone.federation
 # namespace. (string value)
 #driver = sql
-{% if server.websso is defined %}
+{%- if server.get('websso', {}).federation_driver is defined %}
 driver = {{ server.websso.federation_driver }}
 {%- endif %}
 
@@ -855,6 +850,9 @@ driver = {{ server.websso.federation_driver }}
 # environment (e.g. if using the mod_shib plugin this value is `Shib-Identity-
 # Provider`). (string value)
 #remote_id_attribute = <None>
+{%- if server.websso is defined %}
+remote_id_attribute = {{ server.websso.remote_id_attribute }}
+{%- endif %}
 
 # A domain name that is reserved to allow federated ephemeral users to have a
 # domain concept. Note that an admin will not be able to create a domain with
@@ -868,12 +866,10 @@ driver = {{ server.websso.federation_driver }}
 # example: trusted_dashboard=http://acme.com/auth/websso
 # trusted_dashboard=http://beta.com/auth/websso (multi valued)
 #trusted_dashboard =
-{%- if server.websso is defined %}
-{%- if server.websso.trusted_dashboard is defined %}
+{%- if server.get('websso', {}).trusted_dashboard is defined %}
 {%- for dashboard in server.websso.trusted_dashboard %}
 trusted_dashboard = {{ dashboard }}
 {%- endfor %}
-{%- endif %}
 {%- endif %}
 
 # Location of Single Sign-On callback handler, will return a token to a trusted
@@ -948,11 +944,7 @@ domain_config_dir = /etc/keystone/domains
 # Entrypoint for the identity backend driver in the keystone.identity
 # namespace. Supplied drivers are ldap and sql. (string value)
 #driver = sql
-{%- if server.get('backend', 'sql') == 'ldap' %}
-driver = ldap
-{%- else %}
-driver = sql
-{%- endif %}
+driver = {{ server.get('backend', 'sql') }}
 
 # Toggle for identity caching. This has no effect unless global caching is
 # enabled. (boolean value)
@@ -971,6 +963,10 @@ driver = sql
 # (integer value)
 #list_limit = <None>
 
+{%- if server.get("backend", "sql") == "k2k" and server.k2k is defined %}
+{%- set k2k = server.k2k %}
+{% include "keystone/files/_k2k.conf" %}
+{%- endif %}
 
 [identity_mapping]
 
@@ -1475,7 +1471,12 @@ servers = ['{{ server.cache.host }}:{{ server.cache.port }}']
 # messaging, messagingv2, routing, log, test, noop (multi valued)
 # Deprecated group/name - [DEFAULT]/notification_driver
 #driver =
-{%- if server.notification %}
+{%- if server.notification is mapping %}
+driver = {{ server.notification.get('driver', 'messagingv2') }}
+{%- if server.notification.topics is defined %}
+topics = {{ server.notification.topics }}
+{%- endif %}
+{%- elif server.notification %}
 driver=messagingv2
 {%- endif %}
 
@@ -1543,17 +1544,15 @@ driver=messagingv2
 # Allowed values: round-robin, shuffle
 #kombu_failover_strategy = round-robin
 
-# The RabbitMQ broker address where a single node is used. (string value)
-# Deprecated group/name - [DEFAULT]/rabbit_host
-#rabbit_host = localhost
+{%- if server.message_queue.members is defined %}
+rabbit_hosts = {% for member in server.message_queue.members -%}
+                   {{ member.host }}:{{ member.get('port', 5672) }}
+                   {%- if not loop.last -%},{%- endif -%}
+               {%- endfor -%}
+{%- else %}
 rabbit_host = {{ server.message_queue.host }}
-
-# The RabbitMQ broker port where a single node is used. (port value)
-# Minimum value: 0
-# Maximum value: 65535
-# Deprecated group/name - [DEFAULT]/rabbit_port
-#rabbit_port = 5672
 rabbit_port = {{ server.message_queue.port }}
+{%- endif %}
 
 # RabbitMQ HA cluster host:port pairs. (list value)
 # Deprecated group/name - [DEFAULT]/rabbit_hosts

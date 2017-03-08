@@ -261,6 +261,24 @@ Enable ceilometer notifications
           virtual_host: '/openstack'
           ha_queues: true
 
+Client-side RabbitMQ HA setup
+
+.. code-block:: yaml
+
+    keystone:
+      server:
+        ....
+        message_queue:
+          engine: rabbitmq
+          members:
+            - host: 10.0.16.1
+            - host: 10.0.16.2
+            - host: 10.0.16.3
+          user: openstack
+          password: pwd
+          virtual_host: '/openstack'
+        ....
+
 Enable CADF audit notification
 
 .. code-block:: yaml
@@ -303,6 +321,7 @@ Enable Federated keystone
           federation_driver: keystone.contrib.federation.backends.sql.Federation
           trusted_dashboard:
             - http://${_param:proxy_vip_address_public}/horizon/auth/websso/
+          shib_url_scheme: https
     apache:
       server:
         pkgs:
@@ -311,6 +330,25 @@ Enable Federated keystone
         modules:
           - wsgi
           - shib2
+
+Use a custom identity driver with custom options
+
+.. code-block:: yaml
+
+    keystone:
+      server:
+        backend: k2k
+        k2k:
+          auth_url: 'https://keystone.example.com/v2.0'
+          read_user: 'example_user'
+          read_pass: 'password'
+          read_tenant_id: 'admin'
+          identity_driver: 'sql'
+          id_prefix: 'k2k:'
+          domain: 'default'
+          caching: true
+          cache_time: 600
+
 
 Keystone client
 ---------------
@@ -356,15 +394,32 @@ Project, users, roles enforcement with admin user
             admin:
               host: 10.0.0.2
               port: 5000
-              project: 'token'
+              project: admin
               user: admin
               password: 'passwd'
+              region_name: RegionOne
+              protocol: https
             roles:
             - admin
             - member
             project:
               tenant01:
                 description: "test env"
+                quota:
+                  instances: 100
+                  cores: 24
+                  ram: 151200
+                  floating_ips: 50
+                  fixed_ips: -1
+                  metadata_items: 128
+                  injected_files: 5
+                  injected_file_content_bytes: 10240
+                  injected_file_path_bytes: 255
+                  key_pairs: 100
+                  security_groups: 20
+                  security_group_rules: 40
+                  server_groups: 20
+                  server_group_members: 20
                 user:
                   user01:
                     email: jdoe@domain.com
@@ -375,6 +430,78 @@ Project, users, roles enforcement with admin user
                     password: some
                     roles:
                     - custom-roles
+
+Multiple servers example
+
+.. code-block:: yaml
+
+    keystone:
+      client:
+        enabled: true
+        server:
+          keystone01:
+            admin:
+              host: 10.0.0.2
+              port: 5000
+              project: 'admin'
+              user: admin
+              password: 'workshop'
+              region_name: RegionOne
+              protocol: https
+          keystone02:
+            admin:
+              host: 10.0.0.3
+              port: 5000
+              project: 'admin'
+              user: admin
+              password: 'workshop'
+              region_name: RegionOne
+
+
+Tenant quotas
+
+.. code-block:: yaml
+
+    keystone:
+      client:
+        enabled: true
+        server:
+          keystone01:
+            admin:
+              host: 10.0.0.2
+              port: 5000
+              project: admin
+              user: admin
+              password: 'passwd'
+              region_name: RegionOne
+              protocol: https
+            roles:
+            - admin
+            - member
+            project:
+              tenant01:
+                description: "test env"
+                quota:
+                  instances: 100
+                  cores: 24
+                  ram: 151200
+                  floating_ips: 50
+                  fixed_ips: -1
+                  metadata_items: 128
+                  injected_files: 5
+                  injected_file_content_bytes: 10240
+                  injected_file_path_bytes: 255
+                  key_pairs: 100
+                  security_groups: 20
+                  security_group_rules: 40
+                  server_groups: 20
+                  server_group_members: 20
+
+Usage
+=====
+
+Apply state `keystone.client.service` first and then `keystone.client` state.
+
 
 Documentation and Bugs
 ======================
@@ -401,3 +528,36 @@ repository at:
 Developers should also join the discussion on the IRC list, at:
 
     https://wiki.openstack.org/wiki/Meetings/openstack-salt
+
+Documentation and Bugs
+======================
+
+To learn how to install and update salt-formulas, consult the documentation
+available online at:
+
+    http://salt-formulas.readthedocs.io/
+
+In the unfortunate event that bugs are discovered, they should be reported to
+the appropriate issue tracker. Use Github issue tracker for specific salt
+formula:
+
+    https://github.com/salt-formulas/salt-formula-keystone/issues
+
+For feature requests, bug reports or blueprints affecting entire ecosystem,
+use Launchpad salt-formulas project:
+
+    https://launchpad.net/salt-formulas
+
+You can also join salt-formulas-users team and subscribe to mailing list:
+
+    https://launchpad.net/~salt-formulas-users
+
+Developers wishing to work on the salt-formulas projects should always base
+their work on master branch and submit pull request against specific formula.
+
+    https://github.com/salt-formulas/salt-formula-keystone
+
+Any questions or feedback is always welcome so feel free to join our IRC
+channel:
+
+    #salt-formulas @ irc.freenode.net

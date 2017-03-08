@@ -59,8 +59,10 @@ keystone_group:
   - template: jinja
   - require:
     - pkg: keystone_packages
+  {%- if not grains.get('noservices', False) %}
   - watch_in:
     - service: keystone_service
+  {%- endif %}
 
 {% if server.websso is defined %}
 
@@ -69,8 +71,10 @@ keystone_group:
   - source: salt://keystone/files/sso_callback_template.html
   - require:
     - pkg: keystone_packages
+  {%- if not grains.get('noservices', False) %}
   - watch_in:
     - service: keystone_service
+  {%- endif %}
 
 {%- endif %}
 
@@ -140,7 +144,9 @@ keystone_domain_{{ domain_name }}:
     - unless: source /root/keystonercv3 && openstack domain list | grep " {{ domain_name }}"
     - require:
       - file: /root/keystonercv3
+    {%- if not grains.get('noservices', False) %}
       - service: keystone_service
+    {%- endif %}
 {%- endif %}
 
 {%- endfor %}
@@ -198,6 +204,7 @@ keystone_entrypoint:
 keystone_syncdb:
   cmd.run:
   - name: keystone-manage db_sync; sleep 1
+  - timeout: 120
   - require:
     - service: keystone_service
 {%- endif %}
@@ -284,7 +291,7 @@ keystone_{{ service_name }}_service:
   - require:
     - keystone: keystone_roles
 
-keystone_{{ service_name }}_endpoint:
+keystone_{{ service_name }}_{{ service.get('region', 'RegionOne') }}_endpoint:
   keystone.endpoint_present:
   - name: {{ service.get('service', service_name) }}
   - publicurl: '{{ service.bind.get('public_protocol', 'http') }}://{{ service.bind.public_address }}:{{ service.bind.public_port }}{{ service.bind.public_path }}'
