@@ -1,3 +1,9 @@
+salt-formula-keystone (2016.12.1-1trusty2) trusty; urgency=medium
+
+  * Add new dependencies for tests
+
+ -- Filip Pytloun <filip@pytloun.cz>  Mon, 10 Apr 2017 08:38:26 +0200
+
 salt-formula-keystone (2016.12.1-1trusty1) trusty; urgency=medium
 
   * Build for Ubuntu trusty
