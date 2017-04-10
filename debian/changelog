@@ -1,3 +1,9 @@
+salt-formula-keystone (2016.12.1-2) unstable; urgency=medium
+
+  * Add depdendencies for tests
+
+ -- Filip Pytloun <filip@pytloun.cz>  Mon, 10 Apr 2017 08:41:00 +0200
+
 salt-formula-keystone (2016.12.1-1) unstable; urgency=medium
 
   * New upstream release
