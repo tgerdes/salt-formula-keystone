@@ -1,3 +1,9 @@
+salt-formula-keystone (2016.12.1-1xenial2) xenial; urgency=medium
+
+  * Add more dependencies
+
+ -- Filip Pytloun <filip@pytloun.cz>  Mon, 10 Apr 2017 08:37:14 +0200
+
 salt-formula-keystone (2016.12.1-1xenial1) xenial; urgency=medium
 
   * Build for Ubuntu xenial
